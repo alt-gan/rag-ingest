@@ -1,6 +1,7 @@
 import fitz  # PyMuPDF
 import pdfplumber
 import re
+import yaml
 import pytesseract
 import cv2
 import numpy as np
@@ -16,6 +17,9 @@ from abc import ABC, abstractmethod
 import argparse
 
 warnings.filterwarnings("ignore")
+
+with open(Path('config/config.yaml').resolve(), 'r', encoding='utf-8') as f:
+    config = yaml.safe_load(f)
 
 class PDFExtractor(ABC):
     """Abstract base class for PDF extraction."""
@@ -53,7 +57,7 @@ class MarkdownPDFExtractor(PDFExtractor):
     def __init__(self, pdf_path):
         super().__init__(pdf_path)
         self.pdf_filename = Path(pdf_path).stem
-        Path("outputs").mkdir(parents=True, exist_ok=True)
+        Path(config['OUTPUT_DIR']).mkdir(parents=True, exist_ok=True)
         self.setup_image_captioning()
 
     def setup_image_captioning(self):
@@ -73,7 +77,7 @@ class MarkdownPDFExtractor(PDFExtractor):
         try:
             markdown_content, markdown_pages = self.extract_markdown()
             self.save_markdown(markdown_content)
-            self.logger.info(f"Markdown content has been saved to outputs/{self.pdf_filename}.md")
+            self.logger.info(f"Markdown content has been saved to {Path(config['OUTPUT_DIR'])}/{self.pdf_filename}.md")
             return markdown_pages
         
         except Exception as e:
@@ -120,7 +124,7 @@ class MarkdownPDFExtractor(PDFExtractor):
                     table_index += 1
 
                 markdown_pages.append(self.post_process_markdown(page_content))
-                markdown_content += page_content
+                markdown_content += page_content + config['PAGE_DELIMITER']
 
             markdown_content = self.post_process_markdown(markdown_content)
             return markdown_content, markdown_pages
@@ -447,18 +451,18 @@ class MarkdownPDFExtractor(PDFExtractor):
             pix = page.get_pixmap(clip=image_rect)
             image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-            if image.width < 50 or image.height < 50:
+            if image.width < 20 or image.height < 20:
                 return ""
   
             image_filename = f"{self.pdf_filename}_image_{int(page.number)+1}_{block['number']}.png"
-            image_path = Path("outputs") / image_filename  # Convert to Path object
+            image_path = Path(config['OUTPUT_DIR']) / image_filename  # Convert to Path object
             image.save(image_path)
-            
+
             caption = self.caption_image(image)
             if not caption:
                 caption = f"{self.pdf_filename}_image_{int(page.number)+1}_{block['number']}"
 
-            return f"![{caption}]({image_path.resolve()})\n\n"  # image_path is now a Path object
+            return f"![{caption}]({image_path})\n\n"  # image_path is now a Path object
         except Exception as e:
             self.logger.error(f"Error processing image block: {e}")
             self.logger.exception(traceback.format_exc())
@@ -504,8 +508,8 @@ class MarkdownPDFExtractor(PDFExtractor):
     def save_markdown(self, markdown_content):
         """Save the markdown content to a file."""
         try:
-            os.makedirs("outputs", exist_ok=True)
-            with open(f"outputs/{self.pdf_filename}.md", "w", encoding="utf-8") as f:
+            os.makedirs(Path(config['OUTPUT_DIR']), exist_ok=True)
+            with open(f"{Path(config['OUTPUT_DIR'])}/{self.pdf_filename}.md", "w", encoding="utf-8") as f:
                 f.write(markdown_content)
             self.logger.info("Markdown content saved successfully.")
         except Exception as e:

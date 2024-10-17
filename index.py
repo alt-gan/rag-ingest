@@ -213,18 +213,23 @@ class Index:
             raise
 
 
-    def persist_docs(self, file_paths: list, category: str) -> None:
+    def persist_docs(self, file_paths: list, category: str, md_flag: bool) -> None:
         all_chunks = []
 
         with tqdm(file_paths, desc="Processing files...", initial=1, total=len(file_paths), leave=False) as main_progress_bar:
             for index, file_path in enumerate(main_progress_bar, start=1):
-                file_name = Path(file_path).name
+                file_name = Path(file_path).stem
                 main_progress_bar.set_description(f"File {index}/{len(file_paths)}: {file_name}")
 
                 file_extension = Path(file_path).suffix.lower()
                 
-                extractor = MarkdownPDFExtractor(file_path)
-                markdown_pages = extractor.extract()
+                if md_flag:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        md_content = f.read()
+                    markdown_pages = md_content.rstrip(config['PAGE_DELIMITER']).split(config['PAGE_DELIMITER'])
+                else:
+                    extractor = MarkdownPDFExtractor(file_path)
+                    markdown_pages = extractor.extract()
 
                 with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
                     futures = [executor.submit(self._process_page, (idx, page, file_name, file_extension, category)) for idx, page in enumerate(markdown_pages)]
@@ -257,24 +262,35 @@ def main():
     parser.add_argument("--file_category", help="File Category", required=True)
     parser.add_argument("--collection_name", default="rag_llm", help="Collection Name")
     parser.add_argument("--persist_dir", default="persist", help="Persistent Directory")
+    parser.add_argument("--md_flag", action="store_true", default=False, help="Process markdown content")
 
     args = parser.parse_args()
     
     input_path = Path(args.input).resolve()
     assert args.file_category in ["finance", "healthcare", "oil_gas"], "File category must be either `finance`, `healthcare`, or `oil_gas`"
-
-    if input_path.is_file():
-        assert input_path.suffix.lower() == '.pdf', "Input file must be a PDF"
-        file_paths = [input_path]
-    elif input_path.is_dir():
-        file_paths = list(input_path.glob('*.pdf'))
-        assert len(file_paths) > 0, "No PDF files found in the specified directory"
+    
+    if args.md_flag:
+        if input_path.is_file():
+            assert input_path.suffix.lower() == '.md', "Input file must be a Markdown file"
+            file_paths = [input_path]
+        elif input_path.is_dir():
+            file_paths = list(input_path.glob('*.md'))
+            assert len(file_paths) > 0, "No Markdown files found in the specified directory"
+        else:
+            raise ValueError("Invalid input: must be a Markdown file or a directory containing Markdown files")
     else:
-        raise ValueError("Invalid input: must be a PDF file or a directory containing PDF files")
+        if input_path.is_file():
+            assert input_path.suffix.lower() == '.pdf', "Input file must be a PDF"
+            file_paths = [input_path]
+        elif input_path.is_dir():
+            file_paths = list(input_path.glob('*.pdf'))
+            assert len(file_paths) > 0, "No PDF files found in the specified directory"
+        else:
+            raise ValueError("Invalid input: must be a PDF file or a directory containing PDF files")
 
     try:
         index_obj = Index(args.persist_dir, args.collection_name)
-        index_obj.persist_docs(file_paths, args.file_category)
+        index_obj.persist_docs(file_paths, args.file_category, args.md_flag)
         logger.info(f"Indexing of {len(file_paths)} file(s) completed successfully.")
     except Exception as e:
         logger.error(f"An error occurred during indexing: {str(e)}")
