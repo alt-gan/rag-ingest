@@ -93,9 +93,6 @@ Arguments:
 ├── config/
 │ ├── config.yaml
 │ └── prompts.json
-├── logs/
-├── output/
-├── persist/
 ├── extract.py
 ├── index.py
 ├── requirements.txt
