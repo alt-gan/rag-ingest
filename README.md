@@ -37,7 +37,7 @@ RAG-Ingest is a powerful tool designed to extract markdown content from PDF file
 
 1. Clone the repository:
    ```
-   git clone https://github.com/your-username/rag-ingest.git
+   git clone https://github.com/alt-gan/rag-ingest.git
    cd rag-ingest
    ```
 
